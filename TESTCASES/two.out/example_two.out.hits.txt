@@ -1,0 +1,2 @@
+query_name	query_length	accession_number	subject_length	subject_description	E value	bit score	frame	query_start	query_end	hit_start	hit_end	%_conserved	%_identity
+M01535:64:000000000-AYEHH:1:1101:12986:1498 1:N:0:ATTCAA	301	WP_118839028	962	protein of unknown function DUF1680 [Cyclobacterium marinum DSM 745]	0.0015	32.4	2	2	58	567	585	100.0%	89.5%
