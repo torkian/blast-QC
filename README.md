@@ -277,7 +277,7 @@ A Quality Control filter and parser for NCBI BLAST XML results.
 >Coming soon
 
 ## Credits
-Special thanks to Spencer Hann, Sean Norman, and the [RCI group](https://sc.edu/about/offices_and_divisions/division_of_information_technology/rci/) 
+Special thanks to Norman Lab, and the [RC group](https://sc.edu/about/offices_and_divisions/division_of_information_technology/rci/) 
 
 
 ## License
