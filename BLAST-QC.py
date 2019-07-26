@@ -226,7 +226,7 @@ with open(_init_['filename']) as results_in:
     try:
         tree = ET.parse(results_in)
     except:
-        raise Exception('XML file could not be parsed. Check the BLAST results file.')
+        raise FileNotFoundError('XML file could not be parsed. Check the BLAST results file.')
 
     root = tree.getroot()
 
