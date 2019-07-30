@@ -14,9 +14,9 @@ import xml.etree.ElementTree as ET
 # |*
 # |* Usage             : python BLAST-QC.py {-args}
 # |*
-# |* Args              : -h {help} -f {filename} -o {outfile} -v {BLAST version}
+# |* Args              : -h {help} -i {infile} -o {outfile} -t {BLAST type}
 # |*                     -n {number of hits} -e {evalue threshold} -b {bit-score threshold}
-# |*                     -i {% identity threshold} -t {taxonomy threshold} -or {order by}
+# |*                     -i {% identity threshold} -d {definition threshold} -or {order by}
 # |*                     -er {evalue range} -br {bit-score range} -ir {% identity range}
 # |*
 # |* Description       : This script is designed to quality control BLAST XML results (BLAST -outfmt 5).
@@ -35,19 +35,21 @@ import xml.etree.ElementTree as ET
 # |*
 # |**********************************************************************
 
+
 class Hit:
     def __init__(self):         # Tag in BLAST XML output
         self.num = 0            # <Iteration_iter-num>
         self.desc = None        # <Iteration_query-def>
-        self.length = 0         # <Iteration_query-len>
+        self.qlength = 0        # <Iteration_query-len>
         self.num = 0            # <Hit_num>
         self.id = None          # <Hit_id>
-        self.desc = None        # <Hit_def>
+        self.def_ = None        # <Hit_def>
         self.accession = None   # <Hit_accession>
-        self.length = 0         # <Hit_len>
+        self.hlength = 0        # <Hit_len>
         self.bitscore = 0.0     # <Hsp_bitscore>
         self.score = 0          # <Hsp_score>
         self.evalue = 0.0       # <Hsp_evalue>
+        self.deflevel = 0.0     # Number of lines present in <Hit_def>
         self.query_start =0     # <Hsp_query-from>
         self.query_end = 0      # <Hsp_query-to>
         self.hit_start = 0      # <Hsp_hit-from>
@@ -73,29 +75,29 @@ class List:
         elif _init_['order'] == 'i':
             self.hits.sort(reverse=True, key=lambda hit: hit.p_identity)
         elif _init_['order'] == 't':
-            self.hits.sort(reverse=True, key=lambda hit: hit.taxlevel)
+            self.hits.sort(reverse=True, key=lambda hit: hit.deflevel)
 
-        # if a range is specified only add hits that are within range and then sort by taxlevel.
+        # if a range is specified only add hits that are within range and then sort by deflevel.
         if _init_['erange'] is not 0:
             accept_val = self.hits[0].evalue + _init_['erange']
             for i in range(len(self.hits)):
                 if self.hits[i].evalue <= accept_val:
                     self.top_hits.append(self.hits[i])
-            self.top_hits.sort(reverse=True, key=lambda hit: hit.taxlevel)
+            self.top_hits.sort(reverse=True, key=lambda hit: hit.deflevel)
 
         elif _init_['brange'] is not 0:
             accept_val = self.hits[0].bitscore - _init_['brange']
             for i in range(len(self.hits)):
                 if self.hits[i].bitscore >= accept_val:
                     self.top_hits.append(self.hits[i])
-            self.top_hits.sort(reverse=True, key=lambda hit: hit.taxlevel)
+            self.top_hits.sort(reverse=True, key=lambda hit: hit.deflevel)
 
         elif _init_['irange'] is not 0:
             accept_val = self.hits[0].p_identity - _init_['irange']
             for i in range(len(self.hits)):
                 if self.hits[i].p_identity >= accept_val:
                     self.top_hits.append(self.hits[i])
-            self.top_hits.sort(reverse=True, key=lambda hit: hit.taxlevel)
+            self.top_hits.sort(reverse=True, key=lambda hit: hit.deflevel)
 
         else: self.top_hits = self.hits
 
@@ -120,7 +122,7 @@ class Output:
         for i in range(0, len(master_list.top_hits)):
             self.hits.write('{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}%\t{}%\n'
                     .format(master_list.top_hits[i].desc, master_list.top_hits[i].length,
-                    master_list.top_hits[i].accession, master_list.top_hits[i].length, master_list.top_hits[i].desc,
+                    master_list.top_hits[i].accession, master_list.top_hits[i].length, master_list.top_hits[i].def_,
                     master_list.top_hits[i].evalue, master_list.top_hits[i].bitscore, master_list.top_hits[i].query_frame,
                     master_list.top_hits[i].query_start, master_list.top_hits[i].query_end, master_list.top_hits[i].hit_start,
                     master_list.top_hits[i].hit_end, master_list.top_hits[i].p_conserved, master_list.top_hits[i].p_identity))
@@ -144,13 +146,13 @@ class Output:
 # more info can be found at: 'https://docs.python.org/3/library/argparse.html'
 def Initialize():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-f", "--filename", help="Specifiy the Blast XML results input file.\n(required)",
+    parser.add_argument("-i", "--input", help="Specifiy the Blast XML results input file.\n(required)",
                                             required=True, type=str)
 
     parser.add_argument("-o", "--output", help="Specify the output file base name (no extension). "
                                                "Defaults to base name of input file.", type=str)
 
-    parser.add_argument("-v", "--version", help="Specify which version of BLAST you are running\n(BLASTP, BLASTN, BLASTX)."
+    parser.add_argument("-t", "--type", help="Specify what type of BLAST you are running\n(Protein or Nucleotide)."
                                                 " (required)", choices=["p", "n", "x"], type=str, required=True)
 
     parser.add_argument("-n", "--number", help="Specify the number of hits to return per query sequence. "
@@ -168,26 +170,26 @@ def Initialize():
                                                   "\n(Minimum acceptable percentage) (Float value)",
                                                   type=float, default=-1)
 
-    parser.add_argument("-t", "--taxonomy", help="Specify a threshold in the level of taxonomy detail provided."
+    parser.add_argument("-d", "--definition", help="Specify a threshold in the level of definition provided."
                                                  "This is defined by how many separate lines are present in the Hit "
                                                  "definition '<Hit_def>' of the XML file.\n(Int value)",
                                                 type=int, default=-1)
 
     parser.add_argument("-or", "--order", help="Specify the order of the results. By lowest evalue, highest bitscore, "
-                                                "highest percent identity or most detailed taxonomic data."
+                                                "highest percent identity or most detailed definition data."
                                                 "\n(default: by evalue- 'e')",
                                                 type=str, choices=["e", "b", "i", "t"], default='e')
 
     parser.add_argument("-er", "--erange", help="Sets a range of acceptable deviation from the lowest evalue hit "
-                                                "in which a more detailed taxonomic description would be prefered. "
+                                                "in which a more detailed definition would be prefered. "
                                                 "Must be ordered by evalue.", type=float, default=0)
 
     parser.add_argument("-br", "--brange", help="Sets a range of acceptable deviation from the highest bitscore hit "
-                                                "in which a more detailed taxonomic description would be prefered. "
+                                                "in which a more detailed definition would be prefered. "
                                                 "Must be ordered by bitscore.", type=float, default=0)
 
     parser.add_argument("-ir", "--irange", help="Sets a range of acceptable deviation from the highest percent identity "
-                                                "hit in which a more detailed taxonomic description would be prefered. "
+                                                "hit in which a more detailed definition would be prefered. "
                                                 "Must be ordered by percent identity.", type=float, default=0)
 
     if len(sys.argv[1:]) == 0:
@@ -206,17 +208,17 @@ def Initialize():
         parser.error('brange cannot be used. Must order by bitscore if this functionality is desired.'
                      '\nuse \'-h\' or \'--help\' to display help menu.')
 
-    if not os.path.isfile(args.filename):
-        parser.error('The file {} does not exist on this path.'.format(args.filename))
+    if not os.path.isfile(args.input):
+        parser.error('The file {} does not exist on this path.'.format(args.input))
 
-    if not args.filename.lower().endswith('.xml'):
+    if not args.input.lower().endswith('.xml'):
         parser.error('Input file must be a BLAST results XML file')
 
     if args.output is None:
-        args.output = args.filename[:-4]
+        args.output = args.input[:-4]
 
-    return {'filename': args.filename, 'output': args.output, 'version': args.version, 'order': args.order,
-            'num_hits': args.number, 'bitscore': args.bitscore,  'taxlevel': args.taxonomy, 'evalue': args.evalue,
+    return {'filename': args.input, 'output': args.output, 'version': args.version, 'order': args.order,
+            'num_hits': args.number, 'bitscore': args.bitscore,  'deflevel': args.definition, 'evalue': args.evalue,
             '%identity': args.identity, 'erange': args.erange, 'brange': args.brange, 'irange': args.irange}
 
 
@@ -242,30 +244,28 @@ with open(_init_['filename']) as results_in:
         cur_hit = Hit()
         cur_hit.num = query.find('Iteration_iter-num').text
         cur_hit.desc = query.find('Iteration_query-def').text
-        cur_hit.length = query.find('Iteration_query-len').text
-        # number value is needed to separate hit sequences from each other. 
-        # Create a new hit object and append the same query wide values
+        cur_hit.qlength = query.find('Iteration_query-len').text
         number = 0
         for hit in query.findall('./Iteration_hits/Hit'):
             if number > 0:
                 new_hit = Hit()
                 new_hit.num = cur_hit.num
                 new_hit.desc = cur_hit.desc
-                new_hit.length = cur_hit.length
+                new_hit.qlength = cur_hit.qlength
                 cur_hit = new_hit
             cur_hit.id = hit.find('Hit_id').text
-            cur_hit.desc = hit.find('Hit_def').text
+            cur_hit.def_ = hit.find('Hit_def').text
 
             # Change formating of <Hit_def> with blast type - different delimiters.
-            # taxlevel is defined by the count of those delimiters, as with each one there is
-            # an increase in the level of detail in the taxonomic (or protein) description of the hit.
+            # deflevel is defined by the count of those delimiters, as with each one there is
+            # an increase in the level of detail in the definition of the hit.
             if _init_['version'] == 'n':
-                cur_hit.taxlevel = 1 + cur_hit.desc.count(';')
+                cur_hit.deflevel = 1 + cur_hit.def_.count(';')
             if _init_['version'] == 'x' or _init_['version'] == 'p':
-                cur_hit.taxlevel = 1 + cur_hit.desc.count('>')
+                cur_hit.deflevel = 1 + cur_hit.def_.count('>')
 
             cur_hit.accession = hit.find('Hit_accession').text
-            cur_hit.length = hit.find('Hit_len').text
+            cur_hit.hlength = hit.find('Hit_len').text
             number += 1
             count = 0
             for hsp in hit.findall('./Hit_hsps/Hsp'):
@@ -273,11 +273,14 @@ with open(_init_['filename']) as results_in:
                 # Create a new hit object and treat it as a separate hit in the list although it retains some values.
                 if count > 0:
                     new_hit = Hit()
-                    new_hit.id = cur_hit.id
+                    new_hit.num = cur_hit.num
                     new_hit.desc = cur_hit.desc
-                    new_hit.taxlevel = cur_hit.taxlevel
+                    new_hit.qlength = cur_hit.qlength
+                    new_hit.id = cur_hit.id
+                    new_hit.def_ = cur_hit.def_
+                    new_hit.deflevel = cur_hit.deflevel
                     new_hit.accession = cur_hit.accession
-                    new_hit.length = cur_hit.length
+                    new_hit.hlength = cur_hit.hlength
                     cur_hit = new_hit
                 cur_hit.bitscore = float(hsp.find('Hsp_bit-score').text)
                 cur_hit.score = int(hsp.find('Hsp_score').text)
@@ -300,13 +303,14 @@ with open(_init_['filename']) as results_in:
                 # If changes to the thresholds are desired (add more ect.) this is where do do it.
                 if cur_hit.evalue <= _init_['evalue'] \
                 and cur_hit.bitscore >= _init_['bitscore'] \
-                and cur_hit.taxlevel >= _init_['taxlevel'] \
+                and cur_hit.deflevel >= _init_['deflevel'] \
                 and cur_hit.p_identity >= _init_['%identity']:
                     master_list.hits.append(cur_hit)
                 else:
-                    results_out.nohits.write("{}\t{}\tBelow Threshold(s).\n".format(cur_hit.desc, cur_hit.length))
-        if number ==  0:
-            results_out.nohits.write("{}\t{}\tNo hits found.\n".format(cur_hit.desc, cur_hit.length))
+                    results_out.nohits.write("{}\t{}\tBelow Threshold(s).\n".format(cur_hit.desc, cur_hit.qlength))
+
+        if number > 0:
+            results_out.nohits.write("{}\t{}\tNo hits found.\n".format(cur_hit.desc, cur_hit.qlength))
             
     if len(master_list.hits) > 0:
         master_list.order_hits(_init_)

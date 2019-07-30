@@ -17,22 +17,22 @@ A Quality Control filter and parser for NCBI BLAST XML results.
 - Norman lab’s BLAST-QC script has been designed for integration into bioinformatic and genomic workflows and provides options for users to modify and specify the desired functionality.
 - Provides the ability to filter the number of hits returned per query sequence.
 - Provides the ability to order the output by any of the threshold values the user wants.
-- Provides threshold values to tailor the filtered results to whatever specifactions the user requires.
-- Provides a range value that when specified allows for researchers to select the sequences that produced a more detailed taxonomic description within that range. 
-    - Ex.- the top hit has an e-value of .00010 but little taxonomic info., with a set e-value range of .00005 a hit with an e-value of .00015 that has better taxonomic detail will be returned in its place.   
-    - This is one of the features the team finds the most useful as it avoids the problem of finding a high scoring sequence that provides no real relevant information, as there is little use in knowing that a hit accurately matches a sequence with unknown taxonomy.
+- Provides threshold values to tailor the filtered results to whatever specifications the user requires.
+- Provides a range value that when specified allows for researchers to select the sequences that produced a more detailed definition within that range.
+    - Ex.- the top hit has an e-value of .00010 but little info. in the definition, with a set e-value range of .00005 a hit with an e-value of .00015 that has a more detailed definition will be returned in its place.
+    - This is one of the features the team finds the most useful as it avoids the problem of finding a high scoring sequence that provides no real relevant information, as there is little use in knowing that a hit accurately matches an unknown sequence.
 ###### Arguments/options:
 
 <details>
 <summary>Click to expand</summary>     
 <p>
 
-- `-f, --filename {filename}`
+- `-i, --input {filename}`
 >Specifiy the Blast XML results input file.
 - `-o, --output {outfile name}`
 >Specify the output file base name (no extension). BLAST-QC will output 3 text files with this base name `{}.hits.txt`, `{}.nohits.txt`, and `{}.hits.header`
-- `-v, --version {(n, p, x)}` 
->Specify which version of BLAST you are running (BLASTP, BLASTN, BLASTX)
+- `-t, --type {(n, p)}`
+>Specify which version of BLAST you are running (Protein or Nucleotide)
 - `-n, --number {num hits}`
 >Specify the number of hits to return per query sequence. This parameter defaults to return all hits that fit the input values. (Integer value)
 - `-e, --evalue {evalue threshold}`
@@ -41,16 +41,16 @@ A Quality Control filter and parser for NCBI BLAST XML results.
 >Specify a bit-score threshold as a decimal or sci-notation.(Minimum acceptable bitscore)"
 - `-i, --identity {%identity threshold}`
 >Specify a threshold in the percent identity of a hit as a decimal or sci-notation. (Minimum acceptable percentage) 
-- `-t, --taxonomy {taxonomy threshold}`
->Specify a threshold in the level of taxonomy detail provided. This is defined by how many separate lines are present in the Hit definition '<Hit_def>' of the XML file. (Integer value)
+- `-d, --definition {definition threshold}`
+>Specify a threshold in the level of definition provided. This is defined by how many separate lines are present in the Hit definition '<Hit_def>' of the XML file. (Integer value)
 - `-or, --order {(e,b,i,t)}` 
->Specify the order of the results. By lowest evalue `e`, highest bitscore `b`, highest percent identity `i`, or most detailed taxonomic data `t`.
+>Specify the order of the results. By lowest evalue `e`, highest bitscore `b`, highest percent identity `i`, or most detailed definition `d`.
 - `-er, --erange {range value}`
->Sets a range of acceptable deviation from the lowest evalue hit in which a more detailed taxonomic description would be prefered. Must order by evalue to use this functionality.
+>Sets a range of acceptable deviation from the lowest evalue hit in which a more detailed definition would be prefered. Must order by evalue to use this functionality.
 - `-br, --brange {range value}`
->Sets a range of acceptable deviation from the highest bitscore hit in which a more detailed taxonomic description would be prefered. Must order by bitscore to use this functionality.
+>Sets a range of acceptable deviation from the highest bitscore hit in which a more detailed definition would be prefered. Must order by bitscore to use this functionality.
 - `-ir, --irange {range value}` 
->Sets a range of acceptable deviation from the highest percent identity hit (Decimal value) in which a more detailed taxonomic description would be prefered. Must order by percent identity to use this functionality.
+>Sets a range of acceptable deviation from the highest percent identity hit (Decimal value) in which a more detailed definition would be prefered. Must order by percent identity to use this functionality.
 
 </p>  
 </details> 
@@ -58,7 +58,7 @@ A Quality Control filter and parser for NCBI BLAST XML results.
 ## Code Example
 >Running BLAST-QC on a sample result file (replicating -max_target_seqs 1):
 
-    python BLAST-QC.py -f sampleResults.xml -v x -o outfiles/example.out -n 1 -or e
+    python BLAST-QC.py -i sampleResults.xml -t x -o outfiles/example.out -n 1 -or e
 
 >*sampleResults.xml:*
 <details>
@@ -265,7 +265,7 @@ A Quality Control filter and parser for NCBI BLAST XML results.
 - Download BLAST-QC and install the latest version of [Python](https://www.python.org/downloads/).
 
 ## Tests
-- Useage of this program has been documented in the `TESTCASES/` directory of the repository. View and run the bash script `testBLAST-QC.sh` located within which executes the QC script on a sample dataset. 
+- Useage of this program has been documented in the `TESTCASES/` directory of the repository. View and run the bash script `README.sh` located within which executes the QC script on a sample dataset.
 
 ## How to use?
 
@@ -278,7 +278,6 @@ A Quality Control filter and parser for NCBI BLAST XML results.
 
 ## Credits
 Special thanks to Norman Lab
-
 
 ## License
 This program is free software: you can redistribute it and/or modify
