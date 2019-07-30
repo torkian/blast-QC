@@ -6,6 +6,7 @@
 #Most basic call- filename and type of BLAST (in this case blastx) run are required parameters.
 #will result in 3 files: one header with the <Query_def> of the matching hits, one with info on the hits that did not 
 #match input (in this case none) and one with info on hits that match the input arguments. 
+
 python ../BLAST-QC.py --input sampleResults.xml --type n --output one.out/example_one.out --order e
 
 #replicating a `-max_target_seqs` parameter (without all the confusion) note the low level of detail in the hit's definition.
