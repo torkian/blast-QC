@@ -8,7 +8,7 @@ import xml.etree.ElementTree as ET
 # |*
 # |* Program name      : BLAST-QC.py
 # |*
-# |* Author            : Spencer Hann, Ben Torkian, Sean Norman
+# |* Author            : Spencer Hann
 # |*
 # |* Date created      : 07/18/2019
 # |*
@@ -24,6 +24,10 @@ import xml.etree.ElementTree as ET
 # |*                     and the best N matching hits with all relevant info are output in a tabular format-
 # |*                     for import into a spreadsheet program for analysis.
 # |*
+# |* License:            This program is free software: you can redistribute it and/or modify
+# |*                     it under the terms of the MIT License as published by
+# |*                     the Open Source Initiative. 'https://opensource.org/licenses/MIT'
+# |*
 # |* Revision History  :
 # |*
 # |* |Date:|        |Author:|      |Ref:|    |Revision:|
@@ -33,6 +37,9 @@ import xml.etree.ElementTree as ET
 
 class Hit:
     def __init__(self):         # Tag in BLAST XML output
+        self.num = 0            # <Iteration_iter-num>
+        self.desc = None        # <Iteration_query-def>
+        self.length = 0         # <Iteration_query-len>
         self.num = 0            # <Hit_num>
         self.id = None          # <Hit_id>
         self.desc = None        # <Hit_def>
@@ -52,15 +59,12 @@ class Hit:
         self.p_identity = 0.0   # 100*(<Hsp_identity>/<Hsp_align-len>)
         self.p_conserved = 0.0  # 100*(<Hsp_positive>/<Hsp_align-len>)
 
-class Query:
-    def __init__(self):
-        self.num = 0            # <Iteration_iter-num>
-        self.desc = None        # <Iteration_query-def>
-        self.length = 0         # <Iteration_query-len>
-        self.hits = []          # Holds a list of all hits for that query
-        self.top_hits = []      # Holds a list of the best hits that fit user input
 
-    # Apply ordering as input by user
+class List:
+    def __init__(self):
+        self.top_hits = []
+        self.hits = []
+    
     def order_hits(self, _init_):
         if _init_['order'] == 'e':
             self.hits.sort(key=lambda hit: hit.evalue)
@@ -97,6 +101,7 @@ class Query:
 
         # Apply the input filter number unless all matching hits are desired
         if _init_['num_hits'] != 0:
+            self.hits = self.top_hits
             self.top_hits = self.top_hits[0:_init_['num_hits']]
 
 
@@ -111,18 +116,19 @@ class Output:
 
     # Print resulting data for all top hits requested into the file in tabular format.
     # Formatting and which values are output can be modified here.
-    def write_hits(self, query, _init_):
-        for i in range(0, len(query.top_hits)):
+    def write_hits(self, master_list, _init_):
+        for i in range(0, len(master_list.top_hits)):
             self.hits.write('{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}%\t{}%\n'
-                            .format(query.desc, query.length,
-                            query.top_hits[i].accession, query.top_hits[i].length, query.top_hits[i].desc,
-                            query.top_hits[i].evalue, query.top_hits[i].bitscore, query.top_hits[i].query_frame,
-                            query.top_hits[i].query_start, query.top_hits[i].query_end, query.top_hits[i].hit_start,
-                            query.top_hits[i].hit_end, query.top_hits[i].p_conserved, query.top_hits[i].p_identity))
-            self.header.write('{}\n'.format(query.desc))
+                    .format(master_list.top_hits[i].desc, master_list.top_hits[i].length,
+                    master_list.top_hits[i].accession, master_list.top_hits[i].length, master_list.top_hits[i].desc,
+                    master_list.top_hits[i].evalue, master_list.top_hits[i].bitscore, master_list.top_hits[i].query_frame,
+                    master_list.top_hits[i].query_start, master_list.top_hits[i].query_end, master_list.top_hits[i].hit_start,
+                    master_list.top_hits[i].hit_end, master_list.top_hits[i].p_conserved, master_list.top_hits[i].p_identity))
+            self.header.write('{}\n'.format(master_list.top_hits[i].desc))
 
-        for _ in range(len(query.top_hits), len(query.hits)):
-            results_out.nohits.write("{}\t{}\tFiltered by number.\n".format(query.desc, query.length))
+        for i in range(len(master_list.top_hits), len(master_list.hits)):
+            results_out.nohits.write("{}\t{}\tFiltered by number.\n"
+                .format(master_list.hits[i].desc, master_list.hits[i].length))
 
     def __del__(self):
         if not self.hits.closed:
@@ -217,6 +223,7 @@ def Initialize():
 # Taking off . . .
 _init_ = Initialize()
 results_out = Output(_init_['output'])
+master_list = List()
 
 # ElementTree is used to parse the XML file to locate data and extract the numerical values from the lines.
 # All values are extracted for easy editing of the code, not all are used here. If another value is needed simply
@@ -224,20 +231,28 @@ results_out = Output(_init_['output'])
 # 'https://docs.python.org/2/library/xml.etree.elementtree.html'
 with open(_init_['filename']) as results_in:
     try:
+
         tree = ET.parse(results_in)
     except:
-        raise Exception('XML file could not be parsed. Check the BLAST results file.')
+        raise FileNotFoundError('XML file could not be parsed. Check the BLAST results file.')
 
     root = tree.getroot()
 
     for query in root.findall('./BlastOutput_iterations/Iteration'):
-        cur_query = Query()
-        cur_query.num = query.find('Iteration_iter-num').text
-        cur_query.desc = query.find('Iteration_query-def').text
-        cur_query.length = query.find('Iteration_query-len').text
-
+        cur_hit = Hit()
+        cur_hit.num = query.find('Iteration_iter-num').text
+        cur_hit.desc = query.find('Iteration_query-def').text
+        cur_hit.length = query.find('Iteration_query-len').text
+        # number value is needed to separate hit sequences from each other. 
+        # Create a new hit object and append the same query wide values
+        number = 0
         for hit in query.findall('./Iteration_hits/Hit'):
-            cur_hit = Hit()
+            if number > 0:
+                new_hit = Hit()
+                new_hit.num = cur_hit.num
+                new_hit.desc = cur_hit.desc
+                new_hit.length = cur_hit.length
+                cur_hit = new_hit
             cur_hit.id = hit.find('Hit_id').text
             cur_hit.desc = hit.find('Hit_def').text
 
@@ -251,12 +266,12 @@ with open(_init_['filename']) as results_in:
 
             cur_hit.accession = hit.find('Hit_accession').text
             cur_hit.length = hit.find('Hit_len').text
-
-            count = 1
+            number += 1
+            count = 0
             for hsp in hit.findall('./Hit_hsps/Hsp'):
                 # Count value is needed to solve the case of multiple hsps per hit.
                 # Create a new hit object and treat it as a separate hit in the list although it retains some values.
-                if count > 1:
+                if count > 0:
                     new_hit = Hit()
                     new_hit.id = cur_hit.id
                     new_hit.desc = cur_hit.desc
@@ -287,17 +302,16 @@ with open(_init_['filename']) as results_in:
                 and cur_hit.bitscore >= _init_['bitscore'] \
                 and cur_hit.taxlevel >= _init_['taxlevel'] \
                 and cur_hit.p_identity >= _init_['%identity']:
-                    cur_query.hits.append(cur_hit)
+                    master_list.hits.append(cur_hit)
                 else:
-                    results_out.nohits.write("{}\t{}\tBelow Threshold(s).\n".format(cur_query.desc, cur_query.length))
-
-        # If this query had hits apply order and write top hits to result files
-        if len(cur_query.hits) != 0:
-            cur_query.order_hits(_init_)
-            results_out.write_hits(cur_query, _init_)
-        else:
-            results_out.nohits.write("{}\t{}\tNo hits found.\n".format(cur_query.desc, cur_query.length))
-
+                    results_out.nohits.write("{}\t{}\tBelow Threshold(s).\n".format(cur_hit.desc, cur_hit.length))
+        if number ==  0:
+            results_out.nohits.write("{}\t{}\tNo hits found.\n".format(cur_hit.desc, cur_hit.length))
+            
+    if len(master_list.hits) > 0:
+        master_list.order_hits(_init_)
+        results_out.write_hits(master_list, _init_)
+   
 # Touchdown . . .
 if not results_in.closed:
     results_in.close()
