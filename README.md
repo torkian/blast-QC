@@ -15,7 +15,7 @@ A Quality Control filter and parser for NCBI BLAST XML results.
 
 ## Features
 - Norman lab’s BLAST-QC script has been designed for integration into bioinformatic and genomic workflows and provides options for users to modify and specify the desired functionality.
-- Provides the ability to filter the number of hits returned per query sequence.
+- Provides the ability to filter the number of hits returned per query file.
 - Provides the ability to order the output by any of the threshold values the user wants.
 - Provides threshold values to tailor the filtered results to whatever specifactions the user requires.
 - Provides a range value that when specified allows for researchers to select the sequences that produced a more detailed taxonomic description within that range. 
