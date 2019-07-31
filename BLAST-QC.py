@@ -14,7 +14,7 @@ import xml.etree.ElementTree as ET
 # |*
 # |* Usage             : python BLAST-QC.py {-args}
 # |*
-# |* Args              : -h {help} -i {infile} -o {outfile} -t {BLAST type}
+# |* Args              : -h {help} -f {infile} -o {outfile} -t {BLAST type}
 # |*                     -n {number of hits} -e {evalue threshold} -b {bit-score threshold}
 # |*                     -i {% identity threshold} -d {definition threshold} -or {order by}
 # |*                     -er {evalue range} -br {bit-score range} -ir {% identity range}
@@ -121,8 +121,8 @@ class Output:
     def write_hits(self, master_list, _init_):
         for i in range(0, len(master_list.top_hits)):
             self.hits.write('{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}%\t{}%\n'
-                    .format(master_list.top_hits[i].desc, master_list.top_hits[i].length,
-                    master_list.top_hits[i].accession, master_list.top_hits[i].length, master_list.top_hits[i].def_,
+                    .format(master_list.top_hits[i].desc, master_list.top_hits[i].qlength,
+                    master_list.top_hits[i].accession, master_list.top_hits[i].hlength, master_list.top_hits[i].def_,
                     master_list.top_hits[i].evalue, master_list.top_hits[i].bitscore, master_list.top_hits[i].query_frame,
                     master_list.top_hits[i].query_start, master_list.top_hits[i].query_end, master_list.top_hits[i].hit_start,
                     master_list.top_hits[i].hit_end, master_list.top_hits[i].p_conserved, master_list.top_hits[i].p_identity))
@@ -130,7 +130,7 @@ class Output:
 
         for i in range(len(master_list.top_hits), len(master_list.hits)):
             results_out.nohits.write("{}\t{}\tFiltered by number.\n"
-                .format(master_list.hits[i].desc, master_list.hits[i].length))
+                .format(master_list.hits[i].desc, master_list.hits[i].qlength))
 
     def __del__(self):
         if not self.hits.closed:
@@ -146,14 +146,14 @@ class Output:
 # more info can be found at: 'https://docs.python.org/3/library/argparse.html'
 def Initialize():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--input", help="Specifiy the Blast XML results input file.\n(required)",
+    parser.add_argument("-f", "--filename", help="Specifiy the Blast XML results input file.\n(required)",
                                             required=True, type=str)
 
     parser.add_argument("-o", "--output", help="Specify the output file base name (no extension). "
                                                "Defaults to base name of input file.", type=str)
 
     parser.add_argument("-t", "--type", help="Specify what type of BLAST you are running\n(Protein or Nucleotide)."
-                                                " (required)", choices=["p", "n", "x"], type=str, required=True)
+                                                " (required)", choices=["p", "n"], type=str, required=True)
 
     parser.add_argument("-n", "--number", help="Specify the number of hits to return per query sequence. "
                                                "Defaults to return all hits that fit input threshold(s).\n(Int value)",
@@ -208,16 +208,16 @@ def Initialize():
         parser.error('brange cannot be used. Must order by bitscore if this functionality is desired.'
                      '\nuse \'-h\' or \'--help\' to display help menu.')
 
-    if not os.path.isfile(args.input):
-        parser.error('The file {} does not exist on this path.'.format(args.input))
+    if not os.path.isfile(args.filename):
+        parser.error('The file {} does not exist on this path.'.format(args.filename))
 
-    if not args.input.lower().endswith('.xml'):
-        parser.error('Input file must be a BLAST results XML file')
+    if not args.filename.lower().endswith('.xml'):
+        parser.error('input file must be a BLAST results XML file')
 
     if args.output is None:
-        args.output = args.input[:-4]
+        args.output = args.filename[:-4]
 
-    return {'filename': args.input, 'output': args.output, 'version': args.version, 'order': args.order,
+    return {'filename': args.filename, 'output': args.output, 'type': args.type, 'order': args.order,
             'num_hits': args.number, 'bitscore': args.bitscore,  'deflevel': args.definition, 'evalue': args.evalue,
             '%identity': args.identity, 'erange': args.erange, 'brange': args.brange, 'irange': args.irange}
 
@@ -233,10 +233,9 @@ master_list = List()
 # 'https://docs.python.org/2/library/xml.etree.elementtree.html'
 with open(_init_['filename']) as results_in:
     try:
-
         tree = ET.parse(results_in)
     except:
-        raise FileNotFoundError('XML file could not be parsed. Check the BLAST results file.')
+        raise FileNotFoundError('XML file could not be parsed. Check the BLAST results file: {}.'.format(results_in.name))
 
     root = tree.getroot()
 
@@ -259,9 +258,9 @@ with open(_init_['filename']) as results_in:
             # Change formating of <Hit_def> with blast type - different delimiters.
             # deflevel is defined by the count of those delimiters, as with each one there is
             # an increase in the level of detail in the definition of the hit.
-            if _init_['version'] == 'n':
+            if _init_['type'] == 'n':
                 cur_hit.deflevel = 1 + cur_hit.def_.count(';')
-            if _init_['version'] == 'x' or _init_['version'] == 'p':
+            if _init_['type'] == 'p':
                 cur_hit.deflevel = 1 + cur_hit.def_.count('>')
 
             cur_hit.accession = hit.find('Hit_accession').text
