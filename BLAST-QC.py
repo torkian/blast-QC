@@ -8,7 +8,7 @@ import xml.etree.ElementTree as ET
 # |*
 # |* Program name      : BLAST-QC.py
 # |*
-# |* Author            : Spencer Hann
+# |* Author            : Spencer Hann, Ben Torkian, Sean Norman
 # |*
 # |* Date created      : 07/18/2019
 # |*
@@ -38,18 +38,14 @@ import xml.etree.ElementTree as ET
 
 class Hit:
     def __init__(self):         # Tag in BLAST XML output
-        self.num = 0            # <Iteration_iter-num>
-        self.desc = None        # <Iteration_query-def>
-        self.qlength = 0        # <Iteration_query-len>
         self.num = 0            # <Hit_num>
         self.id = None          # <Hit_id>
         self.def_ = None        # <Hit_def>
         self.accession = None   # <Hit_accession>
-        self.hlength = 0        # <Hit_len>
+        self.length = 0         # <Hit_len>
         self.bitscore = 0.0     # <Hsp_bitscore>
         self.score = 0          # <Hsp_score>
         self.evalue = 0.0       # <Hsp_evalue>
-        self.deflevel = 0.0     # Number of lines present in <Hit_def>
         self.query_start =0     # <Hsp_query-from>
         self.query_end = 0      # <Hsp_query-to>
         self.hit_start = 0      # <Hsp_hit-from>
@@ -62,11 +58,14 @@ class Hit:
         self.p_conserved = 0.0  # 100*(<Hsp_positive>/<Hsp_align-len>)
 
 
-class List:
+class Query:
     def __init__(self):
-        self.top_hits = []
-        self.hits = []
-    
+        self.num = 0            # <Iteration_iter-num>
+        self.def_ = None        # <Iteration_query-def>
+        self.length = 0         # <Iteration_query-len>
+        self.hits = []          # Holds a list of all hits for that query
+        self.top_hits = []      # Holds a list of the best hits that fit user input
+
     def order_hits(self, _init_):
         if _init_['order'] == 'e':
             self.hits.sort(key=lambda hit: hit.evalue)
@@ -84,26 +83,22 @@ class List:
                 if self.hits[i].evalue <= accept_val:
                     self.top_hits.append(self.hits[i])
             self.top_hits.sort(reverse=True, key=lambda hit: hit.deflevel)
-
         elif _init_['brange'] is not 0:
             accept_val = self.hits[0].bitscore - _init_['brange']
             for i in range(len(self.hits)):
                 if self.hits[i].bitscore >= accept_val:
                     self.top_hits.append(self.hits[i])
             self.top_hits.sort(reverse=True, key=lambda hit: hit.deflevel)
-
         elif _init_['irange'] is not 0:
             accept_val = self.hits[0].p_identity - _init_['irange']
             for i in range(len(self.hits)):
                 if self.hits[i].p_identity >= accept_val:
                     self.top_hits.append(self.hits[i])
             self.top_hits.sort(reverse=True, key=lambda hit: hit.deflevel)
-
         else: self.top_hits = self.hits
 
         # Apply the input filter number unless all matching hits are desired
         if _init_['num_hits'] != 0:
-            self.hits = self.top_hits
             self.top_hits = self.top_hits[0:_init_['num_hits']]
 
 
@@ -118,19 +113,17 @@ class Output:
 
     # Print resulting data for all top hits requested into the file in tabular format.
     # Formatting and which values are output can be modified here.
-    def write_hits(self, master_list, _init_):
-        for i in range(0, len(master_list.top_hits)):
+    def write_hits(self, query, _init_):
+        for i in range(0, len(query.top_hits)):
             self.hits.write('{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}%\t{}%\n'
-                    .format(master_list.top_hits[i].desc, master_list.top_hits[i].qlength,
-                    master_list.top_hits[i].accession, master_list.top_hits[i].hlength, master_list.top_hits[i].def_,
-                    master_list.top_hits[i].evalue, master_list.top_hits[i].bitscore, master_list.top_hits[i].query_frame,
-                    master_list.top_hits[i].query_start, master_list.top_hits[i].query_end, master_list.top_hits[i].hit_start,
-                    master_list.top_hits[i].hit_end, master_list.top_hits[i].p_conserved, master_list.top_hits[i].p_identity))
-            self.header.write('{}\n'.format(master_list.top_hits[i].desc))
-
-        for i in range(len(master_list.top_hits), len(master_list.hits)):
-            results_out.nohits.write("{}\t{}\tFiltered by number.\n"
-                .format(master_list.hits[i].desc, master_list.hits[i].qlength))
+                            .format(query.def_, query.length,
+                            query.top_hits[i].accession, query.top_hits[i].length, query.top_hits[i].def_,
+                            query.top_hits[i].evalue, query.top_hits[i].bitscore, query.top_hits[i].query_frame,
+                            query.top_hits[i].query_start, query.top_hits[i].query_end, query.top_hits[i].hit_start,
+                            query.top_hits[i].hit_end, query.top_hits[i].p_conserved, query.top_hits[i].p_identity))
+            self.header.write('{}\n'.format(query.def_))
+        for _ in range(len(query.top_hits), len(query.hits)):
+            results_out.nohits.write("{}\t{}\tFiltered by number.\n".format(query.def_, query.length))
 
     def __del__(self):
         if not self.hits.closed:
@@ -221,11 +214,9 @@ def Initialize():
             'num_hits': args.number, 'bitscore': args.bitscore,  'deflevel': args.definition, 'evalue': args.evalue,
             '%identity': args.identity, 'erange': args.erange, 'brange': args.brange, 'irange': args.irange}
 
-
 # Taking off . . .
 _init_ = Initialize()
 results_out = Output(_init_['output'])
-master_list = List()
 
 # ElementTree is used to parse the XML file to locate data and extract the numerical values from the lines.
 # All values are extracted for easy editing of the code, not all are used here. If another value is needed simply
@@ -234,24 +225,18 @@ master_list = List()
 with open(_init_['filename']) as results_in:
     try:
         tree = ET.parse(results_in)
+        root = tree.getroot()
     except:
         raise FileNotFoundError('XML file could not be parsed. Check the BLAST results file: {}.'.format(results_in.name))
 
-    root = tree.getroot()
 
     for query in root.findall('./BlastOutput_iterations/Iteration'):
-        cur_hit = Hit()
-        cur_hit.num = query.find('Iteration_iter-num').text
-        cur_hit.desc = query.find('Iteration_query-def').text
-        cur_hit.qlength = query.find('Iteration_query-len').text
-        number = 0
+        cur_query = Query()
+        cur_query.num = query.find('Iteration_iter-num').text
+        cur_query.def_ = query.find('Iteration_query-def').text
+        cur_query.length = query.find('Iteration_query-len').text
         for hit in query.findall('./Iteration_hits/Hit'):
-            if number > 0:
-                new_hit = Hit()
-                new_hit.num = cur_hit.num
-                new_hit.desc = cur_hit.desc
-                new_hit.qlength = cur_hit.qlength
-                cur_hit = new_hit
+            cur_hit = Hit()
             cur_hit.id = hit.find('Hit_id').text
             cur_hit.def_ = hit.find('Hit_def').text
 
@@ -262,25 +247,22 @@ with open(_init_['filename']) as results_in:
                 cur_hit.deflevel = 1 + cur_hit.def_.count(';')
             if _init_['type'] == 'p':
                 cur_hit.deflevel = 1 + cur_hit.def_.count('>')
-
             cur_hit.accession = hit.find('Hit_accession').text
-            cur_hit.hlength = hit.find('Hit_len').text
-            number += 1
-            count = 0
+            cur_hit.length = hit.find('Hit_len').text
+            count = 1
+            
             for hsp in hit.findall('./Hit_hsps/Hsp'):
                 # Count value is needed to solve the case of multiple hsps per hit.
                 # Create a new hit object and treat it as a separate hit in the list although it retains some values.
-                if count > 0:
+                if count > 1:
                     new_hit = Hit()
-                    new_hit.num = cur_hit.num
-                    new_hit.desc = cur_hit.desc
-                    new_hit.qlength = cur_hit.qlength
                     new_hit.id = cur_hit.id
                     new_hit.def_ = cur_hit.def_
                     new_hit.deflevel = cur_hit.deflevel
                     new_hit.accession = cur_hit.accession
-                    new_hit.hlength = cur_hit.hlength
+                    new_hit.length = cur_hit.length
                     cur_hit = new_hit
+                    
                 cur_hit.bitscore = float(hsp.find('Hsp_bit-score').text)
                 cur_hit.score = int(hsp.find('Hsp_score').text)
                 cur_hit.evalue = float(hsp.find('Hsp_evalue').text)
@@ -304,17 +286,16 @@ with open(_init_['filename']) as results_in:
                 and cur_hit.bitscore >= _init_['bitscore'] \
                 and cur_hit.deflevel >= _init_['deflevel'] \
                 and cur_hit.p_identity >= _init_['%identity']:
-                    master_list.hits.append(cur_hit)
+                    cur_query.hits.append(cur_hit)
                 else:
-                    results_out.nohits.write("{}\t{}\tBelow Threshold(s).\n".format(cur_hit.desc, cur_hit.qlength))
+                    results_out.nohits.write("{}\t{}\tBelow Threshold(s).\n".format(cur_query.def_, cur_query.length))
 
-        if number > 0:
-            results_out.nohits.write("{}\t{}\tNo hits found.\n".format(cur_hit.desc, cur_hit.qlength))
-            
-    if len(master_list.hits) > 0:
-        master_list.order_hits(_init_)
-        results_out.write_hits(master_list, _init_)
-   
+        # If this query had hits apply order and write top hits to result files
+        if len(cur_query.hits) != 0:
+            cur_query.order_hits(_init_)
+            results_out.write_hits(cur_query, _init_)
+        else:
+            results_out.nohits.write("{}\t{}\tNo hits found.\n".format(cur_query.def_, cur_query.length))
 # Touchdown . . .
 if not results_in.closed:
     results_in.close()
