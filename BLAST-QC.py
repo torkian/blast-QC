@@ -19,7 +19,7 @@ import xml.etree.ElementTree as ET
 # |*                     -i {% identity threshold} -d {definition threshold} -or {order by}
 # |*                     -er {evalue range} -br {bit-score range} -ir {% identity range}
 # |*
-# |* def_ription       : This script is designed to quality control BLAST XML results (BLAST -outfmt 5).
+# |* Description       : This script is designed to quality control BLAST XML results (BLAST -outfmt 5).
 # |*                     Results will be filtered based on user input in the form of command-line args,
 # |*                     and the best N matching hits with all relevant info are output in a tabular format-
 # |*                     for import into a spreadsheet program for analysis.
@@ -109,7 +109,7 @@ class Output:
         self.hits = open(filename+'.hits.txt', 'w')
         self.nohits = open(filename+'.nohits.txt', 'w')
         self.header = open(filename+'.hits.header', 'w')
-        self.hits.write("query_name\tquery_length\taccession_number\tsubject_length\tsubject_def_ription\tE value"
+        self.hits.write("query_name\tquery_length\taccession_number\tsubject_length\tsubject_description\tE value"
                         "\tbit score\tframe\tquery_start\tquery_end\thit_start\thit_end\t%_conserved\t%_identity\n")
         self.nohits.write("query_name\tquery_length\tfailure_reason\n")
 
