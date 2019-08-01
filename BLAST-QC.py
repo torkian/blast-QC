@@ -19,7 +19,7 @@ import xml.etree.ElementTree as ET
 # |*                     -i {% identity threshold} -d {definition threshold} -or {order by}
 # |*                     -er {evalue range} -br {bit-score range} -ir {% identity range}
 # |*
-# |* Description       : This script is designed to quality control BLAST XML results (BLAST -outfmt 5).
+# |* def_ription       : This script is designed to quality control BLAST XML results (BLAST -outfmt 5).
 # |*                     Results will be filtered based on user input in the form of command-line args,
 # |*                     and the best N matching hits with all relevant info are output in a tabular format-
 # |*                     for import into a spreadsheet program for analysis.
@@ -82,12 +82,14 @@ class Query:
             for i in range(len(self.hits)):
                 if self.hits[i].evalue <= accept_val:
                     self.top_hits.append(self.hits[i])
+
             self.top_hits.sort(reverse=True, key=lambda hit: hit.deflevel)
         elif _init_['brange'] is not 0:
             accept_val = self.hits[0].bitscore - _init_['brange']
             for i in range(len(self.hits)):
                 if self.hits[i].bitscore >= accept_val:
                     self.top_hits.append(self.hits[i])
+
             self.top_hits.sort(reverse=True, key=lambda hit: hit.deflevel)
         elif _init_['irange'] is not 0:
             accept_val = self.hits[0].p_identity - _init_['irange']
@@ -107,7 +109,7 @@ class Output:
         self.hits = open(filename+'.hits.txt', 'w')
         self.nohits = open(filename+'.nohits.txt', 'w')
         self.header = open(filename+'.hits.header', 'w')
-        self.hits.write("query_name\tquery_length\taccession_number\tsubject_length\tsubject_description\tE value"
+        self.hits.write("query_name\tquery_length\taccession_number\tsubject_length\tsubject_def_ription\tE value"
                         "\tbit score\tframe\tquery_start\tquery_end\thit_start\thit_end\t%_conserved\t%_identity\n")
         self.nohits.write("query_name\tquery_length\tfailure_reason\n")
 
@@ -227,7 +229,7 @@ with open(_init_['filename']) as results_in:
         tree = ET.parse(results_in)
         root = tree.getroot()
     except:
-        raise FileNotFoundError('XML file could not be parsed. Check the BLAST results file: {}.'.format(results_in.name))
+        raise Exception('\n***  XML file could not be parsed. Check the BLAST results file: {}.  ***\n'.format(results_in.name))
 
 
     for query in root.findall('./BlastOutput_iterations/Iteration'):
