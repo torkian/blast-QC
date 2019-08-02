@@ -15,7 +15,7 @@ A Quality Control filter and parser for NCBI BLAST XML results.
 
 ## Features
 - Norman lab’s BLAST-QC script has been designed for integration into bioinformatic and genomic workflows and provides options for users to modify and specify the desired functionality.
-- Provides the ability to filter the number of hits returned per query file.
+- Provides the ability to filter the number of hits returned per query sequence.
 - Provides the ability to order the output by any of the threshold values the user wants.
 - Provides threshold values to tailor the filtered results to whatever specifications the user requires.
 - Provides a range value that when specified allows for researchers to select the sequences that produced a more detailed definition within that range.
@@ -27,7 +27,7 @@ A Quality Control filter and parser for NCBI BLAST XML results.
 <summary>Click to expand</summary>     
 <p>
 
-- `-i, --input {filename}`
+- `-f, --filename {filename}`
 >Specifiy the Blast XML results input file.
 - `-o, --output {outfile name}`
 >Specify the output file base name (no extension). BLAST-QC will output 3 text files with this base name `{}.hits.txt`, `{}.nohits.txt`, and `{}.hits.header`
@@ -58,7 +58,7 @@ A Quality Control filter and parser for NCBI BLAST XML results.
 ## Code Example
 >Running BLAST-QC on a sample result file (replicating -max_target_seqs 1):
 
-    python BLAST-QC.py -i sampleResults.xml -t x -o outfiles/example.out -n 1 -or e
+    python BLAST-QC.py -f sampleResults.xml -t x -o outfiles/example.out -n 1 -or e
 
 >*sampleResults.xml:*
 <details>
