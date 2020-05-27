@@ -1,0 +1,57 @@
+<project xmlns:unless="ant:unless">
+    <property name="build" value="build/" />
+    <property name="src" value="src/BLAST_QC_JAVA" />
+    <property name="lib" value="lib/" />
+
+    <!--        BLAST QC ARGS       -->
+    <property name="filename" value="out.xml"/>
+    <property name="fileformat" value="XML"/>
+    <property name="output" value=""/>
+    <property name="type" value="p"/>
+    <property name="number" value=""/>
+    <property name="evalue" value=""/>
+    <property name="definition" value=""/>
+    <property name="order" value=""/>
+    <property name="erange" value=""/>
+    <property name="brange" value=""/>
+    <property name="irange" value=""/>
+    <!--#############################-->
+
+        <target name="clean">
+            <delete dir="${build}"/> 
+        </target>
+
+        <path id="classpath">
+            <fileset dir="${lib}">
+                <include name="**/*.jar"/>
+            </fileset>
+        </path>
+
+        <target name="build" depends="clean">
+            <mkdir dir="${build}"/>
+            <javac destdir="${build}" includeantruntime="false">
+                <src path="${src}"/>
+                <classpath refid="classpath"/>
+            </javac>
+        </target>
+
+        <target name="run" depends="build">
+            <java classname="BLAST_QC_JAVA.BLASTQC">
+                <classpath>
+                    <path refid="classpath"/>
+                    <pathelement location="${build}"/>
+                </classpath>
+                <arg value="-f ${filename}" unless:blank="${filename}"/>
+                <arg value="-fileformat ${fileformat}" unless:blank="${fileformat}"/>
+                <arg value="-o ${output}" unless:blank="${output}"/>
+                <arg value="-t ${type}" unless:blank="${type}"/>
+                <arg value="-n ${number}" unless:blank="${number}"/>
+                <arg value="-e ${evalue}" unless:blank="${evalue}"/>
+                <arg value="-d ${definition}" unless:blank="${definition}"/>
+                <arg value="-order ${order}" unless:blank="${order}"/>
+                <arg value="-erange ${erange}" unless:blank="${erange}"/>
+                <arg value="-brange ${brange}" unless:blank="${brange}"/>
+                <arg value="-irange ${irange}" unless:blank="${irange}"/>
+            </java>
+        </target>
+</project>
