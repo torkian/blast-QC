@@ -23,7 +23,7 @@ import traceback
 # |*                     -i {% identity threshold} -d {definition threshold} -or {order by}
 # |*                     -er {evalue range} -br {bit-score range} -ir {% identity range}
 # |*
-# |* description       : This script is designed to quality control BLAST XML results (BLAST -outfmt 5).
+# |* Description       : This script is designed to quality control BLAST XML results (BLAST -outfmt 5).
 # |*                     Results will be filtered based on user input in the form of command-line args,
 # |*                     and the best N matching hits with all relevant info are output in a tabular format-
 # |*                     for import into a spreadsheet program for analysis.
@@ -192,7 +192,48 @@ class BLASTQC:
             print('\n***  XML file could not be parsed. Check the BLAST results file  ***\n')
             sys.exit()
 
-        for query in root.findall('./BlastOutput_iterations/Iteration'):
+        queryList = root.findall('./BlastOutput_iterations/Iteration')
+
+        if(self.clOptions.parallel > 1):
+            ListofQueryList = list(self.chunks(queryList, self.clOptions.parallel))
+            manager = Manager()
+            q = manager.Queue()
+            pool = Pool(processes=self.clOptions.parallel + 2)
+
+            pool.apply_async(self.listener, (q,))
+
+            processes = []
+            for l in ListofQueryList:
+                process = pool.apply_async(self.readXML, (l,q))
+                processes.append(process)
+
+            for process in processes:
+                process.get()
+
+            q.put('kill')
+            pool.close()
+            pool.join()
+
+        else:
+            x, y, z = self.readXML(queryList)
+            with open(self.clOptions.output + ".hits.txt", 'a') as hits:
+                with open(self.clOptions.output + ".nohits.txt", 'a') as nohits:
+                    with open(self.clOptions.output + ".hits.header", 'a') as header:
+                        if(len(x) > 0):
+                            for s in x:
+                                hits.write(s)
+                        elif(len(y) > 0):
+                            for s in y:
+                                nohits.write(s)
+                        elif(len(z) > 0):
+                            for s in z:
+                                header.write(s)
+
+    def readXML(self, queryList, q=None):
+        hits = []
+        nohits = []
+        header = []
+        for query in queryList:
             cur_query = Query()
             cur_query.num = query.find('Iteration_iter-num').text
             cur_query.def_ = query.find('Iteration_query-def').text
@@ -239,8 +280,8 @@ class BLASTQC:
                     count += 1
 
                     # Calculate the %identity and %conserved by using the align length and identity/positive data
-                    cur_hit.p_identity = float("%.1f"%(100 * cur_hit.identity / cur_hit.align_len))
-                    cur_hit.p_conserved = float("%.1f"%(100 * cur_hit.positive / cur_hit.align_len))
+                    cur_hit.p_identity = float("%.1f"%(100 * float(cur_hit.identity) / float(cur_hit.align_len)))
+                    cur_hit.p_conserved = float("%.1f"%(100 * float(cur_hit.positive) / float(cur_hit.align_len)))
 
                     # Apply thresholds and add hit to list if it conforms.
                     # If changes to the thresholds are desired (add more ect.) this is where do do it.
@@ -253,20 +294,46 @@ class BLASTQC:
             # If this query had hits apply order and write top hits to result files
             if len(cur_query.hits) != 0:
                 self.order_hits(cur_query)
-                with open(self.clOptions.output+'.hits.txt', 'a') as hits:
-                    with open(self.clOptions.output+'.hits.header', 'a') as header:
-                        for i in range(0, len(cur_query.hits)):
-                            hits.write('{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}%\t{}%\n'
-                                            .format(cur_query.def_, cur_query.length,
-                                            cur_query.hits[i].accession, cur_query.hits[i].length, cur_query.hits[i].def_,
-                                            cur_query.hits[i].evalue, cur_query.hits[i].bitscore, cur_query.hits[i].query_frame,
-                                            cur_query.hits[i].query_start, cur_query.hits[i].query_end, cur_query.hits[i].hit_start,
-                                            cur_query.hits[i].hit_end, cur_query.hits[i].p_conserved, cur_query.hits[i].p_identity))
-                            header.write('{}\t{}\n'.format(cur_query.def_, cur_query.hits[i].def_))
+                for i in range(0, len(cur_query.hits)):
+                    hits.append('{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}%\t{}%\n'
+                                    .format(cur_query.def_, cur_query.length,
+                                    cur_query.hits[i].accession, cur_query.hits[i].length, cur_query.hits[i].def_,
+                                    cur_query.hits[i].evalue, cur_query.hits[i].bitscore, cur_query.hits[i].query_frame,
+                                    cur_query.hits[i].query_start, cur_query.hits[i].query_end, cur_query.hits[i].hit_start,
+                                    cur_query.hits[i].hit_end, cur_query.hits[i].p_conserved, cur_query.hits[i].p_identity))
+                    header.append('{}\t{}\n'.format(cur_query.def_, cur_query.hits[i].def_))
             else:
-                with open(self.clOptions.output+'.nohits.txt', 'a') as nohits:
-                    nohits.write("{}\tNo hits found.\n".format(cur_query.def_))
-            
+                nohits.append("{}\tNo hits found.\n".format(cur_query.def_))
+
+        if(q != None):
+            q.put([hits, nohits, header])
+
+        return ([hits, nohits, header])
+
+    def chunks(self, l, n):
+        for i in range(0, len(l), n):
+            yield l[i:i+n]   
+
+    def listener(self, q):
+        with open(self.clOptions.output + ".hits.txt", 'a') as hits:
+            with open(self.clOptions.output + ".nohits.txt", 'a') as nohits:
+                with open(self.clOptions.output + ".hits.header", 'a') as header:
+                    while 1:
+                        m  = q.get()
+                        if m == 'kill':
+                            break
+                        if(len(m[0]) > 0):
+                            for s in m[0]:
+                                hits.write(s)
+                            hits.flush()
+                        if(len(m[1]) > 0):
+                            for s in m[1]:
+                                nohits.write(s)
+                            nohits.flush()
+                        if(len(m[2]) > 0):
+                            for s in m[2]:
+                                header.write(s)
+                            header.flush()   
 
     def parseTab(self):
         # csv is used to parse the blast tabular output format (outfmt 6)
@@ -278,9 +345,51 @@ class BLASTQC:
         else:
             results_in = sys.stdin
 
+        queryList = list(csv.reader(results_in, delimiter='\t'))
+
+        if(self.clOptions.parallel > 1):
+            ListofQueryList = list(self.chunks(queryList, self.clOptions.parallel))
+            manager = Manager()
+            q = manager.Queue()
+            pool = Pool(processes=self.clOptions.parallel + 2)
+
+            watcher = pool.apply_async(self.listener, (q,))
+
+            processes = []
+            for l in ListofQueryList:
+                process = pool.apply_async(self.readTabular, (l,q))
+                processes.append(process)
+
+            for process in processes:
+                process.get()
+
+            q.put('kill')
+            pool.close()
+            pool.join()
+
+        else:
+            x, y, z = self.readTabular(queryList)
+            with open(self.clOptions.output + ".hits.txt", 'a') as hits:
+                with open(self.clOptions.output + ".nohits.txt", 'a') as nohits:
+                    with open(self.clOptions.output + ".hits.header", 'a') as header:
+                        if(len(x) > 0):
+                            for s in x:
+                                hits.write(s)
+                        elif(len(y) > 0):
+                            for s in y:
+                                nohits.write(s)
+                        elif(len(z) > 0):
+                            for s in z:
+                                header.write(s)
+
+    
+    def readTabular(self, tabfile, q=None):
+        hits = []
+        nohits = []
+        header = []
         cur_query = None;
         cur_hit = None;
-        tabfile = csv.reader(results_in, delimiter='\t')
+
         for row in tabfile:
             if(row[0][0] == '#'):
                 continue
@@ -289,59 +398,64 @@ class BLASTQC:
             elif cur_query.id != row[0]:
                 if len(cur_query.hits) != 0:
                     self.order_hits(cur_query)
-                    with open(self.clOptions.output+'.hits.txt', 'a') as hits:
-                        with open(self.clOptions.output+'.hits.header', 'a') as header:
-                            for i in range(0, len(cur_query.hits)):
-                                hits.write('{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n'
-                                                .format(cur_query.id, cur_query.hits[i].id, cur_query.hits[i].identity, 
-                                                cur_query.hits[i].align_len, cur_query.hits[i].mismatch, cur_query.hits[i].gapopen, cur_query.hits[i].query_start,
-                                                cur_query.hits[i].query_end, cur_query.hits[i].hit_start, cur_query.hits[i].hit_end, cur_query.hits[i].evalue, 
-                                                cur_query.hits[i].bitscore, cur_query.hits[i].def_))
-                                header.write('{}\t{}\n'.format(cur_query.id, cur_query.hits[i].id))
+                    for i in range(0, len(cur_query.hits)):
+                        # hits.append('{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n'
+                        #                 .format(cur_query.id, cur_query.hits[i].id, cur_query.hits[i].identity, 
+                        #                 cur_query.hits[i].align_len, cur_query.hits[i].mismatch, cur_query.hits[i].gapopen, cur_query.hits[i].query_start,
+                        #                 cur_query.hits[i].query_end, cur_query.hits[i].hit_start, cur_query.hits[i].hit_end, cur_query.hits[i].evalue, 
+                        #                 cur_query.hits[i].bitscore, cur_query.hits[i].def_))
+                        str = "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}".format(cur_query.id, cur_query.hits[i].id, cur_query.hits[i].identity, 
+                                        cur_query.hits[i].align_len, cur_query.hits[i].mismatch, cur_query.hits[i].gapopen, cur_query.hits[i].query_start,
+                                        cur_query.hits[i].query_end, cur_query.hits[i].hit_start, cur_query.hits[i].hit_end, cur_query.hits[i].evalue, 
+                                        cur_query.hits[i].bitscore)
+                        if(len(row) >= 13):
+                            str+="\t{}\n".format(cur_query.hits[i].def_);
+                        else:
+                            str+="\n"
+                        hits.append(str)
+                        header.append('{}\t{}\n'.format(cur_query.id, cur_query.hits[i].id))
                 else:
-                    with open(self.clOptions.output+'.nohits.txt', 'a') as nohits:
-                        nohits.write("{}\tNo hits found.\n".format(cur_query.id))
+                    nohits.append("{}\tNo hits found.\n".format(cur_query.id))
                 cur_query = Query()
 
             cur_hit = Hit()
             cur_query.id = row[0]
             cur_hit.id = row[1]
-            cur_hit.identity = row[2]
-            cur_hit.align_len = row[3]
+            cur_hit.identity = float(row[2])
+            cur_hit.align_len = int(row[3])
             cur_hit.mismatch = row[4]
             cur_hit.gapopen = row[5]
             cur_hit.query_start = row[6]
             cur_hit.query_end = row[7]
             cur_hit.hit_start = row[8]
             cur_hit.hit_end = row[9]
-            cur_hit.evalue = row[10]
-            cur_hit.bitscore = row[11]
+            cur_hit.evalue = float(row[10])
+            cur_hit.bitscore = float(row[11])
 
             if len(row) >= 13:
                 cur_hit.def_ = row[12]
-                if self.clOptions.type == 'n':
-                    cur_hit.deflevel = 1 + cur_hit.def_.count(';')
-                elif self.clOptions.type == 'p':
-                    cur_hit.deflevel = 1 + cur_hit.def_.count('>')
+                cur_hit.deflevel = 1 + cur_hit.def_.count('>')
 
              # Calculate the %identity and %conserved by using the align length and identity/positive data
-            cur_hit.p_identity = float("%.1f"%(100 * cur_hit.identity / cur_hit.align_len))
+            cur_hit.p_identity = float("%.1f"%(100 * float(cur_hit.identity) / float(cur_hit.align_len)))
 
             cur_query.hits.append(cur_hit)
 
+        if(q!=None):
+            q.put([hits, nohits, header])
+
+        return ([hits, nohits, header])
+
 
     def order_hits(self, cur_query):
-        if(self.clOptions.parallel > 1):
-            cur_query.hits = self.parallel_merge_sort(cur_query.hits, self.clOptions.parallel, self.clOptions.order)
-        else:
-            if self.clOptions.order == 'e':
-                cur_query.hits.sort(key=lambda hit: hit.evalue)
-            elif self.clOptions.order == 'b':
-                cur_query.hits.sort(reverse=True, key=lambda hit: hit.bitscore)
-            elif self.clOptions.order == 'i':
-                cur_query.hits.sort(reverse=True, key=lambda hit: hit.p_identity)
-            elif self.clOptions.order == 'd':
-                cur_query.hits.sort(reverse=True, key=lambda hit: hit.deflevel)
+        if self.clOptions.order == 'e':
+            cur_query.hits.sort(key=lambda hit: hit.evalue)
+        elif self.clOptions.order == 'b':
+            cur_query.hits.sort(reverse=True, key=lambda hit: hit.bitscore)
+        elif self.clOptions.order == 'i':
+            cur_query.hits.sort(reverse=True, key=lambda hit: hit.p_identity)
+        elif self.clOptions.order == 'd':
+            cur_query.hits.sort(reverse=True, key=lambda hit: hit.deflevel)
 
         top_hits = [];
         # if a range is specified only add hits that are within range and then sort by deflevel.
@@ -352,22 +466,16 @@ class BLASTQC:
                     top_hits.append(cur_query.hits[i]) 
                 else:
                     break  
-            if(self.clOptions.parallel > 1):
-                top_hits = self.parallel_merge_sort(top_hits, self.clOptions.parallel, 'd')
-            else:
-                top_hits.sort(reverse=True, key=lambda hit: hit.deflevel)
+            top_hits.sort(reverse=True, key=lambda hit: hit.deflevel)
 
         elif self.clOptions.brange is not 0:
             accept_val = cur_query.hits[0].bitscore - self.clOptions.brange
             for i in range(len(cur_query.hits)):
                 if cur_query.hits[i].bitscore >= accept_val:
-                    top_hits.append(self.hits[i])
+                    top_hits.append(cur_query.hits[i])
                 else:
                     break 
-            if(self.clOptions.parallel > 1):
-                top_hits = self.parallel_merge_sort(top_hits, self.clOptions.parallel, 'd')
-            else:
-                top_hits.sort(reverse=True, key=lambda hit: hit.deflevel)
+            top_hits.sort(reverse=True, key=lambda hit: hit.deflevel)
 
         elif self.clOptions.irange is not 0:
             accept_val = cur_query.hits[0].p_identity - self.clOptions.irange
@@ -376,120 +484,13 @@ class BLASTQC:
                     top_hits.append(cur_query.hits[i])
                 else:
                     break
-            if(self.clOptions.parallel > 1):
-                top_hits = self.parallel_merge_sort(top_hits, self.clOptions.parallel, 'd')
-            else:
-                top_hits.sort(reverse=True, key=lambda hit: hit.deflevel)
+            top_hits.sort(reverse=True, key=lambda hit: hit.deflevel)
 
         else: top_hits = cur_query.hits
 
         # Apply the input filter number unless all matching hits are desired
         if self.clOptions.number != 0:
             cur_query.hits = cur_query.hits[0:self.clOptions.number]
-
-
-    def comp(self, hit1, hit2, mode):
-        if mode == 'e':
-            return hit1.evalue < hit2.evalue
-        elif mode == 'b':
-            return hit1.bitscore > hit2.bitscore
-        elif mode == 'i':
-            return hit1.p_identity > hit2.p_identity
-        elif mode == 'd':
-            return hit1.deflevel > hit2.deflevel
-
-
-    def merge_sort_multiple(self, results, array, mode):
-        results.append(self.merge_sort(array, mode))
-
-
-    def merge_multiple(self, results, array_part_left, array_part_right, mode):
-        results.append(self.merge(array_part_left, array_part_right, mode))
-
-
-    def merge_sort(self, array, mode):
-        array_length = len(array)
-
-        if array_length <= 1:
-            return array
-
-        middle_index = int(array_length / 2)
-        left = array[0:middle_index]
-        right = array[middle_index:]
-        left = self.merge_sort(left, mode)
-        right = self.merge_sort(right, mode)
-        return self.merge(left, right, mode)
-
-
-    def merge(self, left, right, mode):
-        sorted_list = []
-        # We create shallow copies so that we do not mutate
-        # the original objects.
-        left = left[:]
-        right = right[:]
-        # We do not have to actually inspect the length,
-        # as empty lists truth value evaluates to False.
-        # This is for algorithm demonstration purposes.
-        while len(left) > 0 or len(right) > 0:
-            if len(left) > 0 and len(right) > 0:
-                if self.comp(left[0], right[0], mode):
-                    sorted_list.append(left.pop(0))
-                else:
-                    sorted_list.append(right.pop(0))
-            elif len(left) > 0:
-                sorted_list.append(left.pop(0))
-            elif len(right) > 0:
-                sorted_list.append(right.pop(0))
-        return sorted_list
-
-
-    @contextmanager
-    def process_pool(self, size):
-        """Create a process pool and block until
-        all processes have completed.
-        Note: see also concurrent.futures.ProcessPoolExecutor"""
-        pool = Pool(size)
-        yield pool
-        pool.close()
-        pool.join()
-
-
-    def parallel_merge_sort(self, array, process_count, mode):
-        # Divide the list in chunks
-        step = int(len(array) / process_count)
-
-        # Instantiate a multiprocessing.Manager object to
-        # store the output of each process.
-        # See example here
-        # http://docs.python.org/library/multiprocessing.html#sharing-state-between-processes
-        manager = Manager()
-        results = manager.list()
-
-        with self.process_pool(process_count) as pool:
-            for n in range(process_count):
-                # We create a new Process object and assign the
-                # merge_sort_multiple function to it,
-                # using as input a sublist
-                if n < process_count - 1:
-                    chunk = array[n * step:(n + 1) * step]
-                else:
-                    # Get the remaining elements in the list
-                    chunk = array[n * step:]
-                pool.apply_async(self.merge_sort_multiple, (results, chunk, mode))
-
-        # For a core count greater than 2, we can use multiprocessing
-        # again to merge sub-lists in parallel.
-        while len(results) > 1:
-            with self.process_pool(size=process_count) as pool:
-                pool.apply_async(
-                    self.merge_multiple,
-                    (results, results.pop(0), results.pop(0), mode)
-                )
-
-        final_sorted_list = results[0]
-
-        return final_sorted_list
-
 
 
 # Taking off . . .
