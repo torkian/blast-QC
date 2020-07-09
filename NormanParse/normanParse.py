@@ -10,12 +10,12 @@ from subprocess import check_output
     tab-parse.py on every file that matches the input path (ARGV[1]).
 '''
 
-if len(argv) != 2:
+if len(argv) < 2:
 	print("usage: normanParse.py {path containing blast files}")
 	exit(0)
 
-path = argv[1]
-file_names = glob.glob(path)
+file_names = argv[1:]
+print(file_names)
 print("Running tab-parse.py on {} result files.".format(len(file_names)))
 jobid_list =[]
 counter = 0
@@ -27,10 +27,11 @@ for file in file_names:
     f.write('#!/bin/sh\n')
     f.write('#SBATCH -J sldg-parse_' + str(counter) + '\n')
     f.write('#SBATCH -N 1\n')
-    f.write('#SBATCH -n 48\n')
+    #f.write('#SBATCH -n 48\n')
     f.write('#SBATCH -p defq-48core\n')
     f.write('module load python3/anaconda/5.2.0\n')
-    f.write('python tab-parse.py ' + file + '\n')
+    f.write('echo \"run' + str(counter) + '\"\n') 
+    f.write('time python tab-parse.py ' + file + '\n')
     f.close()
     os.chmod(scriptname, 0o0777)
     print(scriptname)
